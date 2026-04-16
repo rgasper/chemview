@@ -52,31 +52,6 @@ def _smiles_to_image(
     return Draw.MolToImage(mol, size=(width, height))
 
 
-def _render_smiles(
-    smiles: str,
-    output_path: Path,
-    width: int,
-    height: int,
-) -> None:
-    """Render a SMILES string to a PNG image file.
-
-    Args:
-        smiles: A valid SMILES string, e.g. "CCO" for ethanol.
-        output_path: Filesystem path where the PNG will be written.
-        width: Image width in pixels.
-        height: Image height in pixels.
-
-    Raises:
-        ValueError: If the SMILES string cannot be parsed by RDKit.
-
-    Example:
-        >>> _render_smiles("CCO", Path("/tmp/ethanol.png"), 400, 300)
-        # writes a 400x300 PNG of ethanol to /tmp/ethanol.png
-    """
-    img = _smiles_to_image(smiles, width, height)
-    img.save(str(output_path))
-
-
 def _open_image(path: Path) -> None:
     """Open an image using the platform's default viewer.
 
@@ -98,10 +73,10 @@ def view(
     smiles: Annotated[str, typer.Argument(help="SMILES string to visualize")],
     width: Annotated[
         int, typer.Option("--width", "-w", help="Image width in pixels")
-    ] = 400,
+    ] = 800,
     height: Annotated[
         int, typer.Option("--height", "-h", help="Image height in pixels")
-    ] = 300,
+    ] = 600,
     output: Annotated[
         Optional[Path],
         typer.Option(
@@ -109,32 +84,41 @@ def view(
         ),
     ] = None,
 ) -> None:
-    """Render a SMILES string and open the resulting image.
+    """Render a SMILES string as a 2D molecule image.
 
-    By default the image is written to a temporary file and opened with the
-    system viewer. Pass --output/-o to save to a specific location instead.
+    By default the image is displayed inline in the terminal using the Kitty
+    or Sixel graphics protocol. If the terminal does not support inline
+    images, falls back to opening with the system image viewer.
+
+    Pass --output/-o to save to a specific file instead.
 
     Example:
         chemview "CCO"
         chemview "c1ccccc1" --width 600 --height 400
         chemview "CCO" -o ethanol.png
     """
-    if output is not None:
-        dest = output
-    else:
-        tmp = tempfile.NamedTemporaryFile(
-            suffix=".png", delete=False, prefix="chemview_"
-        )
-        dest = Path(tmp.name)
-        tmp.close()
-
     try:
-        _render_smiles(smiles, dest, width, height)
+        img = _smiles_to_image(smiles, width, height)
     except ValueError as exc:
         console.print(f"[bold red]Error:[/bold red] {exc}")
         raise typer.Exit(code=1) from exc
 
-    console.print(f"[green]Rendered[/green] {smiles!r} -> {dest}")
+    if output is not None:
+        img.save(str(output))
+        console.print(f"[green]Saved[/green] {smiles!r} -> {output}")
+        return
 
-    if output is None:
-        _open_image(dest)
+    # Try inline terminal display first
+    from chemview.terminal import display_image
+
+    if display_image(img):
+        return
+
+    # Fall back to temp file + system viewer
+    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False, prefix="chemview_")
+    dest = Path(tmp.name)
+    tmp.close()
+
+    img.save(str(dest))
+    console.print(f"[green]Rendered[/green] {smiles!r} -> {dest}")
+    _open_image(dest)

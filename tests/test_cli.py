@@ -1,8 +1,14 @@
 """Tests for CLI rendering functions."""
 
-from PIL import Image
+from pathlib import Path
 
-from chemview.cli import _smiles_to_image
+import pytest
+from PIL import Image
+from typer.testing import CliRunner
+
+from chemview.cli import _smiles_to_image, app
+
+runner = CliRunner()
 
 
 class TestSmilesToImage:
@@ -16,7 +22,23 @@ class TestSmilesToImage:
 
     def test_invalid_smiles_raises_value_error(self) -> None:
         """An invalid SMILES should raise ValueError."""
-        import pytest
-
         with pytest.raises(ValueError, match="could not parse"):
             _smiles_to_image("not_a_smiles_$$$$", width=200, height=150)
+
+
+class TestViewCommand:
+    """Tests for the view CLI command."""
+
+    def test_output_flag_saves_file(self, tmp_path: "Path") -> None:
+        """--output should save the image to the specified path."""
+        dest = tmp_path / "mol.png"
+        result = runner.invoke(app, ["CCO", "-o", str(dest)])
+        assert result.exit_code == 0
+        assert dest.exists()
+        assert dest.stat().st_size > 0
+
+    def test_invalid_smiles_exits_with_error(self) -> None:
+        """Invalid SMILES should exit with code 1."""
+        result = runner.invoke(app, ["not_valid_$$"])
+        assert result.exit_code == 1
+        assert "Error" in result.output
