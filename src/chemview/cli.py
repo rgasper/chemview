@@ -1,10 +1,15 @@
 """CLI for rendering SMILES strings as 2D molecule images."""
 
+from __future__ import annotations
+
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import TYPE_CHECKING, Annotated, Optional
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 import typer
 from loguru import logger
@@ -12,6 +17,39 @@ from rich.console import Console
 
 app = typer.Typer(help="Visualize SMILES strings as 2D molecule images.")
 console = Console()
+
+
+def _smiles_to_image(
+    smiles: str,
+    width: int,
+    height: int,
+) -> Image.Image:
+    """Parse a SMILES string and render it to a PIL Image.
+
+    Args:
+        smiles: A valid SMILES string, e.g. "CCO" for ethanol.
+        width: Image width in pixels.
+        height: Image height in pixels.
+
+    Returns:
+        A PIL Image of the rendered molecule.
+
+    Raises:
+        ValueError: If the SMILES string cannot be parsed by RDKit.
+
+    Example:
+        >>> img = _smiles_to_image("CCO", 400, 300)
+        >>> img.size
+        (400, 300)
+    """
+    from rdkit import Chem
+    from rdkit.Chem import Draw
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f"RDKit could not parse SMILES: {smiles!r}")
+
+    return Draw.MolToImage(mol, size=(width, height))
 
 
 def _render_smiles(
@@ -35,14 +73,7 @@ def _render_smiles(
         >>> _render_smiles("CCO", Path("/tmp/ethanol.png"), 400, 300)
         # writes a 400x300 PNG of ethanol to /tmp/ethanol.png
     """
-    from rdkit import Chem
-    from rdkit.Chem import Draw
-
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        raise ValueError(f"RDKit could not parse SMILES: {smiles!r}")
-
-    img = Draw.MolToImage(mol, size=(width, height))
+    img = _smiles_to_image(smiles, width, height)
     img.save(str(output_path))
 
 
