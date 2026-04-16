@@ -2,7 +2,7 @@
 
 CLI for visualizing SMILES strings as 2D molecule images using RDKit.
 
-<video src="caffeine.mov" autoplay loop muted playsinline></video>
+![demo](caffeine.gif)
 
 ## Setup
 
